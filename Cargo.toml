@@ -1,0 +1,21 @@
+[package]
+name = "async-modbus"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+embedded-io-async = { version = "0.6.1", optional = true }
+thiserror-no-std = "2.0.2"
+zerocopy = "0.8.27"
+zerocopy-derive = "0.8.27"
+
+[features]
+default = ["embedded-io"]
+embedded-io = ["dep:embedded-io-async"]
+
+[dev-dependencies]
+embedded-io-adapters = { version = "0.6.2", features = ["tokio-1"] }
+hex-literal = "1.1.0"
+tokio = { version = "1.48.0", features = ["full"] }
+tokio-modbus = { version = "0.17.0", default-features = false, features = ["rtu-server"] }
+tokio-serial = "5.4.5"
