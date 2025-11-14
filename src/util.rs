@@ -1,4 +1,4 @@
-/// Calculate CRC for Modbus RTU
+/// CRC for Modbus RTU messages.
 pub fn crc(data: &[u8]) -> u16 {
     let mut crc = 0xffff;
 
@@ -35,13 +35,13 @@ macro_rules! modbus_message_methods {
             message
         }
 
-        /// Calculate the CRC for this message
-        pub fn calculate_crc(&self) -> u16 {
+        pub(crate) fn calculate_crc(&self) -> u16 {
             let bytes = self.as_bytes();
+            // The last two bytes are the CRC itself
             crate::crc(&bytes[..bytes.len() - 2])
         }
 
-        /// Check if the CRC is valid
+        /// Check if the CRC is valid.
         pub fn validate_crc(&self) -> Result<(), $crate::CrcError> {
             if self.crc.get() == self.calculate_crc() {
                 Ok(())
@@ -50,13 +50,13 @@ macro_rules! modbus_message_methods {
             }
         }
 
-        /// Get the device address
+        /// Get the device address.
         pub fn address(&self) -> u8 {
             self.addr
         }
 
-        /// Get the function code
-        pub fn function(&self) -> u8 {
+        /// Get the function code.
+        pub(crate) fn function(&self) -> u8 {
             self.function
         }
     };
@@ -80,7 +80,7 @@ macro_rules! modbus_message {
             addr: u8,
             function: u8,
             $(
-                pub $field_name: $field_type,
+                pub(crate) $field_name: $field_type,
             )*
             crc: zerocopy::little_endian::U16,
         }
@@ -107,7 +107,7 @@ macro_rules! modbus_message {
             addr: u8,
             function: u8,
             $(
-                pub $field_name: $field_type,
+                pub(crate) $field_name: $field_type,
             )*
             crc: zerocopy::little_endian::U16,
         }

@@ -1,3 +1,15 @@
+//! Modbus request messages. You can use [`zerocopy::IntoBytes`] to convert
+//! them into byte buffers for sending.
+//!
+//! ```
+//! # use async_modbus::request::WriteHolding;
+//! # use hex_literal::hex;
+//! use async_modbus::zerocopy::IntoBytes;
+//!
+//! let message = WriteHolding::new(0x01, 0x10BC, 12345);
+//! assert_eq!(message.as_bytes(), hex!("01 06 10 BC 30 39 98 FC"));
+//! ```
+
 use super::util::modbus_message;
 use zerocopy::{IntoBytes, big_endian};
 use zerocopy_derive::*;
@@ -48,11 +60,16 @@ modbus_message! {
 impl<const N: usize> WriteHoldings<N> {
     /// Create a new write multiple holding registers request
     pub fn new(addr: u8, starting_register: u16, data: [u16; N]) -> Self {
+        assert!(
+            N <= 127,
+            "cannot write more than 127 registers in a single request"
+        );
+
         Self::new_inner(
             addr,
             starting_register.into(),
             big_endian::U16::new(N as u16),
-            (N * 2) as u8,
+            (N as u8) * 2,
             data.map(big_endian::U16::new),
         )
     }
@@ -91,5 +108,11 @@ mod tests {
     fn test_read_holding_registers() {
         let msg = ReadHoldings::new(0x01, 0x1001, 1000);
         assert_eq!(msg.as_bytes(), hex!("01 03 10 01 03 E8 10 74"),);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot write more than 127 registers in a single request")]
+    fn too_much_data() {
+        WriteHoldings::<128>::new(0x01, 0x1001, [0u16; 128]);
     }
 }

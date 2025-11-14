@@ -1,8 +1,14 @@
+//! Client functions for [`embedded_io_async`]-based IO.
+
 use embedded_io_async::{Read, ReadExactError, Write};
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
-use crate::{Error, request, response};
+use crate::{
+    Error, request,
+    response::{self, Response},
+};
 
+/// Read multiple holding registers from a Modbus device.
 pub async fn read_holdings<const N: usize, E>(
     mut serial: impl Read<Error = E> + Write<Error = E>,
     addr: u8,
@@ -12,10 +18,11 @@ pub async fn read_holdings<const N: usize, E>(
     write_message(&mut serial, &req).await.map_err(Error::Io)?;
 
     let res: response::ReadHoldings<N> = read_message(&mut serial).await?;
-    res.validate(&req)?;
-    Ok(res.data.map(|holding| holding.get()))
+    let data = res.into_data(&req)?;
+    Ok(data.map(|holding| holding.get()))
 }
 
+/// Write a single holding register to a Modbus device.
 pub async fn write_holding<E>(
     mut serial: impl Read<Error = E> + Write<Error = E>,
     addr: u8,
@@ -26,9 +33,10 @@ pub async fn write_holding<E>(
     write_message(&mut serial, &req).await.map_err(Error::Io)?;
 
     let res: response::WriteHolding = read_message(&mut serial).await?;
-    res.validate(&req)
+    Ok(res.into_data(&req)?)
 }
 
+/// Write multiple holding registers to a Modbus device.
 pub async fn write_holdings<const N: usize, E>(
     mut serial: impl Read<Error = E> + Write<Error = E>,
     addr: u8,
@@ -39,9 +47,10 @@ pub async fn write_holdings<const N: usize, E>(
     write_message(&mut serial, &req).await.map_err(Error::Io)?;
 
     let res: response::WriteHoldings = read_message(&mut serial).await?;
-    res.validate(&req)
+    Ok(res.into_data(&req)?)
 }
 
+/// Read multiple input registers from a Modbus device.
 pub async fn read_inputs<const N: usize, E>(
     mut serial: impl Read<Error = E> + Write<Error = E>,
     addr: u8,
@@ -51,8 +60,8 @@ pub async fn read_inputs<const N: usize, E>(
     write_message(&mut serial, &req).await.map_err(Error::Io)?;
 
     let res: response::ReadInputs<N> = read_message(&mut serial).await?;
-    res.validate(&req)?;
-    Ok(res.data.map(|input| input.get()))
+    let data = res.into_data(&req)?;
+    Ok(data.map(|input| input.get()))
 }
 
 async fn write_message<T, E>(mut dst: impl Write<Error = E>, message: &T) -> Result<(), E>
