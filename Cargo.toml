@@ -1,17 +1,21 @@
 [package]
 name = "async-modbus"
+description = "A lightweight asynchronous Modbus protocol implementation for embedded environments."
+license = "MIT"
+documentation = "https://docs.rs/async-modbus"
+repository = "https://github.com/akeamc/async-modbus"
 version = "0.1.0"
 edition = "2024"
+
+[features]
+default = ["embedded-io"]
+embedded-io = ["dep:embedded-io-async"]
 
 [dependencies]
 embedded-io-async = { version = "0.6.1", optional = true }
 thiserror-no-std = "2.0.2"
 zerocopy = "0.8.27"
 zerocopy-derive = "0.8.27"
-
-[features]
-default = ["embedded-io"]
-embedded-io = ["dep:embedded-io-async"]
 
 [dev-dependencies]
 embedded-io-adapters = { version = "0.6.2", features = ["tokio-1"] }
