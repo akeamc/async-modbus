@@ -1,18 +1,20 @@
-use std::{array, future::Ready};
+use std::{array, future::Ready, sync::Mutex};
 
-use async_modbus::embedded_io::read_holdings;
+use async_modbus::embedded_io::{read_holdings, read_inputs, write_holding, write_holdings};
 use embedded_io_adapters::tokio_1::FromTokio;
 use tokio_modbus::{ExceptionCode, Request, server::Service};
 use tokio_serial::SerialStream;
 
 struct MyService {
-    holdings: [u16; 16],
+    holdings: Mutex<[u16; 16]>,
+    inputs: Mutex<[u16; 16]>,
 }
 
 impl MyService {
     fn new() -> Self {
         Self {
-            holdings: array::from_fn(|i| i as u16),
+            holdings: Mutex::new(array::from_fn(|i| i as u16)),
+            inputs: Mutex::new(array::from_fn(|i| 0xa000 + i as u16)),
         }
     }
 }
@@ -26,12 +28,48 @@ impl Service for MyService {
     fn call(&self, req: Self::Request) -> Self::Future {
         let ret = match req {
             Request::ReadHoldingRegisters(addr, qty) => {
-                if (addr as usize) + (qty as usize) > self.holdings.len() {
+                let holdings = self.holdings.lock().unwrap();
+
+                if (addr as usize) + (qty as usize) > holdings.len() {
                     Err(ExceptionCode::IllegalDataAddress)
                 } else {
-                    let data =
-                        self.holdings[addr as usize..(addr as usize + qty as usize)].to_vec();
+                    let data = holdings[addr as usize..(addr as usize + qty as usize)].to_vec();
                     Ok(tokio_modbus::Response::ReadHoldingRegisters(data))
+                }
+            }
+            Request::WriteMultipleRegisters(addr, values) => {
+                let mut holdings = self.holdings.lock().unwrap();
+
+                if (addr as usize) + values.len() > holdings.len() {
+                    Err(ExceptionCode::IllegalDataAddress)
+                } else {
+                    for (i, v) in values.iter().enumerate() {
+                        holdings[addr as usize + i] = *v;
+                    }
+                    Ok(tokio_modbus::Response::WriteMultipleRegisters(
+                        addr,
+                        values.len() as u16,
+                    ))
+                }
+            }
+            Request::WriteSingleRegister(addr, value) => {
+                let mut holdings = self.holdings.lock().unwrap();
+
+                if (addr as usize) < holdings.len() {
+                    holdings[addr as usize] = value;
+                    Ok(tokio_modbus::Response::WriteSingleRegister(addr, value))
+                } else {
+                    Err(ExceptionCode::IllegalDataAddress)
+                }
+            }
+            Request::ReadInputRegisters(addr, qty) => {
+                let inputs = self.inputs.lock().unwrap();
+
+                if (addr as usize) + (qty as usize) > inputs.len() {
+                    Err(ExceptionCode::IllegalDataAddress)
+                } else {
+                    let data = inputs[addr as usize..(addr as usize + qty as usize)].to_vec();
+                    Ok(tokio_modbus::Response::ReadInputRegisters(data))
                 }
             }
             _ => unimplemented!(),
@@ -42,13 +80,19 @@ impl Service for MyService {
 }
 
 #[tokio::test]
-async fn test_server() {
-    let (s0, s1) = SerialStream::pair().unwrap();
+async fn test_server() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, server) = SerialStream::pair()?;
 
-    tokio::spawn(tokio_modbus::server::rtu::Server::new(s0).serve_forever(MyService::new()));
+    tokio::spawn(tokio_modbus::server::rtu::Server::new(server).serve_forever(MyService::new()));
 
-    let serial = FromTokio::new(s1);
+    let mut s = FromTokio::new(client);
 
-    let data = read_holdings(serial, 1, 8).await.unwrap();
-    assert_eq!(data, [8, 9, 10]);
+    assert_eq!(read_holdings(&mut s, 1, 4).await?, [4, 5, 6, 7]);
+    write_holding(&mut s, 1, 4, 104).await?;
+    write_holdings(&mut s, 1, 6, [59]).await?;
+    assert_eq!(read_holdings(&mut s, 1, 2).await?, [2, 3, 104, 5, 59, 7, 8]);
+
+    assert_eq!(read_inputs(&mut s, 1, 0).await?, [40_960, 40_961]);
+
+    Ok(())
 }
