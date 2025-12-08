@@ -4,7 +4,7 @@ description = "A lightweight asynchronous Modbus protocol implementation for emb
 license = "MIT"
 documentation = "https://docs.rs/async-modbus"
 repository = "https://github.com/akeamc/async-modbus"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [features]
