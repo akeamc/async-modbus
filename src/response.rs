@@ -7,7 +7,7 @@
 use crate::{ValidationError, request};
 
 use super::util::modbus_message;
-use zerocopy::{IntoBytes, big_endian};
+use zerocopy::{IntoBytes, big_endian, little_endian};
 use zerocopy_derive::*;
 
 modbus_message! {
@@ -43,6 +43,62 @@ modbus_message! {
         function_code: 0x03,
         data_bytes: u8,
         data: [big_endian::U16; N],
+    }
+}
+
+impl<const N: usize> ReadHoldings<N> {
+    /// Create a new ReadHoldings response.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of registers `N` is greater than 127.
+    #[inline]
+    pub fn new(addr: u8, data: [big_endian::U16; N]) -> Self {
+        Self::new_inner(addr, 2 * N as u8, data)
+    }
+
+    /// Create a new ReadHoldings response in place.
+    #[inline]
+    pub fn new_with(addr: u8, f: impl FnOnce(&mut [big_endian::U16; N])) -> Self {
+        Self::new_with_inner(addr, |m| f(&mut m.data))
+    }
+
+    pub fn data_mut(&mut self) -> &mut [big_endian::U16; N] {
+        &mut self.data
+    }
+}
+
+pub struct ReadHoldingsBuilder<const N: usize>(ReadHoldings<N>);
+
+impl<const N: usize> Default for ReadHoldingsBuilder<N> {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl<const N: usize> ReadHoldingsBuilder<N> {
+    pub const fn new(addr: u8) -> Self {
+        Self(ReadHoldings {
+            addr,
+            function: ReadHoldings::<N>::FUNCTION,
+            data_bytes: 2 * N as u8,
+            data: [big_endian::U16::ZERO; N],
+            crc: little_endian::U16::ZERO,
+        })
+    }
+
+    pub fn data_mut(&mut self) -> &mut [big_endian::U16; N] {
+        &mut self.0.data
+    }
+
+    pub fn finish_ref(&mut self) -> &mut ReadHoldings<N> {
+        self.0.update_crc();
+        &mut self.0
+    }
+
+    pub fn finish(mut self) -> ReadHoldings<N> {
+        self.0.update_crc();
+        self.0
     }
 }
 
@@ -121,6 +177,7 @@ pub trait Response<Request> {
     /// The type of data extracted from the response.
     type Data;
 
-    /// Validate the response against the given request.
+    /// Validate the response against a given request and extract the data on
+    /// success.
     fn into_data(self, request: &Request) -> Result<Self::Data, ValidationError>;
 }

@@ -60,11 +60,6 @@ modbus_message! {
 impl<const N: usize> WriteHoldings<N> {
     /// Create a new write multiple holding registers request
     pub fn new(addr: u8, starting_register: u16, data: [u16; N]) -> Self {
-        assert!(
-            N <= 127,
-            "cannot write more than 127 registers in a single request"
-        );
-
         Self::new_inner(
             addr,
             starting_register.into(),
@@ -108,11 +103,5 @@ mod tests {
     fn test_read_holding_registers() {
         let msg = ReadHoldings::new(0x01, 0x1001, 1000);
         assert_eq!(msg.as_bytes(), hex!("01 03 10 01 03 E8 10 74"),);
-    }
-
-    #[test]
-    #[should_panic(expected = "cannot write more than 127 registers in a single request")]
-    fn too_much_data() {
-        WriteHoldings::<128>::new(0x01, 0x1001, [0u16; 128]);
     }
 }

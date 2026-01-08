@@ -18,10 +18,19 @@ pub fn crc(data: &[u8]) -> u16 {
 }
 
 /// Macro to generate common methods for Modbus message types
-macro_rules! modbus_message_methods {
+macro_rules! modbus_message_impl {
     ($function_code:expr, $($field_name:ident: $field_type:ty),*) => {
+        $crate::util::modbus_message_impl!($function_code, $($field_name: $field_type),*; );
+    };
+    ($function_code:expr, $($field_name:ident: $field_type:ty),*; $($prologue:stmt)*) => {
         #[allow(dead_code)]
+        pub(crate) const FUNCTION: u8 = $function_code;
+
+        #[allow(dead_code)]
+        #[inline]
         fn new_inner(addr: u8, $($field_name: $field_type),*) -> Self {
+            $($prologue)*
+
             let mut message = Self {
                 addr,
                 function: $function_code,
@@ -31,6 +40,18 @@ macro_rules! modbus_message_methods {
                 crc: Default::default(),
             };
 
+            message.crc = message.calculate_crc().into();
+            message
+        }
+
+        #[allow(dead_code)]
+        fn new_with_inner(addr: u8, f: impl FnOnce(&mut Self)) -> Self {
+            $($prologue)*
+
+            let mut message = <Self as zerocopy::FromZeros>::new_zeroed();
+            message.addr = addr;
+            message.function = $function_code;
+            f(&mut message);
             message.crc = message.calculate_crc().into();
             message
         }
@@ -48,6 +69,11 @@ macro_rules! modbus_message_methods {
             } else {
                 Err($crate::CrcError)
             }
+        }
+
+        /// Update the CRC from the current message.
+        pub fn update_crc(&mut self) {
+            self.crc = self.calculate_crc().into();
         }
 
         /// Get the device address.
@@ -86,14 +112,14 @@ macro_rules! modbus_message {
         }
 
         impl $name {
-            $crate::util::modbus_message_methods!($function_code, $($field_name: $field_type),*);
+            $crate::util::modbus_message_impl!($function_code, $($field_name: $field_type),*);
         }
     };
 
     // Variant for messages with const generics
     (
         $(#[$outer:meta])*
-        $name:ident<const $generic:ident: $generic_type:ty> {
+        $name:ident<const N: usize> {
             function_code: $function_code:expr,
             $(
                 $field_name:ident: $field_type:ty
@@ -103,7 +129,7 @@ macro_rules! modbus_message {
         $(#[$outer])*
         #[derive(IntoBytes, Immutable, FromBytes, KnownLayout)]
         #[repr(C)]
-        pub struct $name<const $generic: $generic_type> {
+        pub struct $name<const N: usize> {
             addr: u8,
             function: u8,
             $(
@@ -112,13 +138,17 @@ macro_rules! modbus_message {
             crc: zerocopy::little_endian::U16,
         }
 
-        impl<const $generic: $generic_type> $name<$generic> {
-            $crate::util::modbus_message_methods!($function_code, $($field_name: $field_type),*);
+        impl<const N: usize> $name<N> {
+            $crate::util::modbus_message_impl!(
+                $function_code,
+                $($field_name: $field_type),*;
+                const { assert!(N <= 127, "N must be less than or equal to 127") }
+            );
         }
     };
 }
 
-pub(crate) use {modbus_message, modbus_message_methods};
+pub(crate) use {modbus_message, modbus_message_impl};
 
 #[cfg(test)]
 mod tests {
