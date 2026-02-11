@@ -19,8 +19,6 @@ pub use crate::generated::request_WriteHoldings as WriteHoldings;
 pub use crate::generated::request_ReadInputs as ReadInputs;
 
 impl WriteHolding {
-    /// Write single holding register request
-    ///
     /// Create a new write holding register request
     pub fn new(addr: u8, register: u16, value: u16) -> Self {
         Self::new_inner(addr, register.into(), value.into())
@@ -28,8 +26,6 @@ impl WriteHolding {
 }
 
 impl ReadHoldings {
-    /// Read holding registers request
-    ///
     /// Create a new read holding registers request
     pub fn new(addr: u8, starting_register: u16, n_registers: u16) -> Self {
         Self::new_inner(addr, starting_register.into(), n_registers.into())
@@ -37,8 +33,6 @@ impl ReadHoldings {
 }
 
 impl<const N: usize> WriteHoldings<N> {
-    /// Write multiple holding registers request
-    ///
     /// Create a new write multiple holding registers request
     pub fn new(addr: u8, starting_register: u16, data: [u16; N]) -> Self {
         Self::new_inner(
@@ -52,8 +46,6 @@ impl<const N: usize> WriteHoldings<N> {
 }
 
 impl ReadInputs {
-    /// Read input registers request
-    ///
     /// Create a new read input registers request
     pub fn new(addr: u8, starting_register: u16, n_registers: u16) -> Self {
         Self::new_inner(addr, starting_register.into(), n_registers.into())

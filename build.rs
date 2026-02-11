@@ -81,7 +81,7 @@ fn main() {
             ],
             has_const_generic: true,
             const_assertion: Some(
-                "const { assert!(N <= 127, \"N must be less than or equal to 127\") }".to_string(),
+                "const { assert!(N <= 127, \"N must be less than or equal to 127 (Modbus RTU protocol limit for register count)\") }".to_string(),
             ),
         },
         MessageSpec {
@@ -135,7 +135,7 @@ fn main() {
             ],
             has_const_generic: true,
             const_assertion: Some(
-                "const { assert!(N <= 127, \"N must be less than or equal to 127\") }".to_string(),
+                "const { assert!(N <= 127, \"N must be less than or equal to 127 (Modbus RTU protocol limit for register count)\") }".to_string(),
             ),
         },
         MessageSpec {
@@ -169,7 +169,7 @@ fn main() {
             ],
             has_const_generic: true,
             const_assertion: Some(
-                "const { assert!(N <= 127, \"N must be less than or equal to 127\") }".to_string(),
+                "const { assert!(N <= 127, \"N must be less than or equal to 127 (Modbus RTU protocol limit for register count)\") }".to_string(),
             ),
         },
     ];
