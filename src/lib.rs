@@ -8,6 +8,12 @@ pub mod embedded_io;
 mod error;
 mod util;
 
+// Include generated message types
+mod generated {
+    #![allow(missing_docs)]
+    include!(concat!(env!("OUT_DIR"), "/generated_messages.rs"));
+}
+
 pub mod request;
 pub mod response;
 

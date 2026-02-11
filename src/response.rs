@@ -6,18 +6,13 @@
 
 use crate::{ValidationError, request};
 
-use super::util::modbus_message;
-use zerocopy::{IntoBytes, big_endian, little_endian};
-use zerocopy_derive::*;
+use zerocopy::{big_endian, little_endian};
 
-modbus_message! {
-    /// Write single holding register response
-    WriteHolding {
-        function_code: 0x06,
-        register: big_endian::U16,
-        value: big_endian::U16,
-    }
-}
+// Re-export generated types with proper names
+pub use crate::generated::response_WriteHolding as WriteHolding;
+pub use crate::generated::response_ReadHoldings as ReadHoldings;
+pub use crate::generated::response_WriteHoldings as WriteHoldings;
+pub use crate::generated::response_ReadInputs as ReadInputs;
 
 impl Response<request::WriteHolding> for WriteHolding {
     type Data = ();
@@ -34,15 +29,6 @@ impl Response<request::WriteHolding> for WriteHolding {
         } else {
             Err(ValidationError::UnexpectedResponse)
         }
-    }
-}
-
-modbus_message! {
-    /// Read holding registers response
-    ReadHoldings<const N: usize> {
-        function_code: 0x03,
-        data_bytes: u8,
-        data: [big_endian::U16; N],
     }
 }
 
@@ -119,15 +105,6 @@ impl<const N: usize> Response<request::ReadHoldings> for ReadHoldings<N> {
     }
 }
 
-modbus_message! {
-    /// Write multiple holding registers response
-    WriteHoldings {
-        function_code: 0x10,
-        starting_register: big_endian::U16,
-        n_registers: big_endian::U16,
-    }
-}
-
 impl<const N: usize> Response<request::WriteHoldings<N>> for WriteHoldings {
     type Data = ();
 
@@ -143,15 +120,6 @@ impl<const N: usize> Response<request::WriteHoldings<N>> for WriteHoldings {
         } else {
             Err(ValidationError::UnexpectedResponse)
         }
-    }
-}
-
-modbus_message! {
-    /// Read input registers response
-    ReadInputs<const N: usize> {
-        function_code: 0x04,
-        data_bytes: u8,
-        data: [big_endian::U16; N],
     }
 }
 

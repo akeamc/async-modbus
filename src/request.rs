@@ -10,54 +10,35 @@
 //! assert_eq!(message.as_bytes(), hex!("01 06 10 BC 30 39 98 FC"));
 //! ```
 
-use super::util::modbus_message;
-use zerocopy::{IntoBytes, big_endian};
-use zerocopy_derive::*;
+use zerocopy::big_endian;
 
-modbus_message! {
-    /// Write single holding register request
-    WriteHolding {
-        function_code: 0x06,
-        register: big_endian::U16,
-        value: big_endian::U16,
-    }
-}
+// Re-export generated types with proper names
+pub use crate::generated::request_WriteHolding as WriteHolding;
+pub use crate::generated::request_ReadHoldings as ReadHoldings;
+pub use crate::generated::request_WriteHoldings as WriteHoldings;
+pub use crate::generated::request_ReadInputs as ReadInputs;
 
 impl WriteHolding {
+    /// Write single holding register request
+    ///
     /// Create a new write holding register request
     pub fn new(addr: u8, register: u16, value: u16) -> Self {
         Self::new_inner(addr, register.into(), value.into())
     }
 }
 
-modbus_message! {
-    /// Read holding registers request
-    ReadHoldings {
-        function_code: 0x03,
-        starting_register: big_endian::U16,
-        n_registers: big_endian::U16,
-    }
-}
-
 impl ReadHoldings {
+    /// Read holding registers request
+    ///
     /// Create a new read holding registers request
     pub fn new(addr: u8, starting_register: u16, n_registers: u16) -> Self {
         Self::new_inner(addr, starting_register.into(), n_registers.into())
     }
 }
 
-modbus_message! {
-    /// Write multiple holding registers request
-    WriteHoldings<const N: usize> {
-        function_code: 0x10,
-        starting_register: big_endian::U16,
-        n_registers: big_endian::U16,
-        data_bytes: u8,
-        data: [big_endian::U16; N],
-    }
-}
-
 impl<const N: usize> WriteHoldings<N> {
+    /// Write multiple holding registers request
+    ///
     /// Create a new write multiple holding registers request
     pub fn new(addr: u8, starting_register: u16, data: [u16; N]) -> Self {
         Self::new_inner(
@@ -70,16 +51,9 @@ impl<const N: usize> WriteHoldings<N> {
     }
 }
 
-modbus_message! {
-    /// Read input registers request
-    ReadInputs {
-        function_code: 0x04,
-        starting_register: big_endian::U16,
-        n_registers: big_endian::U16,
-    }
-}
-
 impl ReadInputs {
+    /// Read input registers request
+    ///
     /// Create a new read input registers request
     pub fn new(addr: u8, starting_register: u16, n_registers: u16) -> Self {
         Self::new_inner(addr, starting_register.into(), n_registers.into())
