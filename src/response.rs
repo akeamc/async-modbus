@@ -87,9 +87,8 @@ impl<const N: usize> ReadHoldingsBuilder<N> {
         })
     }
 
-    pub fn set_address(mut self, addr: u8) -> Self {
+    pub fn set_address(&mut self, addr: u8) {
         self.0.addr = addr;
-        self
     }
 
     pub fn data_mut(&mut self) -> &mut [big_endian::U16; N] {
