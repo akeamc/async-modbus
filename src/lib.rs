@@ -3,15 +3,12 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(feature = "embedded-io")]
-pub mod embedded_io;
-
-mod error;
+pub mod client;
+mod frame;
+pub mod pdu;
 mod util;
 
-pub mod request;
-pub mod response;
-
-pub use error::*;
+pub use frame::*;
+pub use pdu::Pdu;
 pub use util::crc;
-
 pub use zerocopy;
