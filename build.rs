@@ -43,6 +43,7 @@ struct FieldBuilder {
     mutable: bool,
     is_data: bool,
     value_from_const_generic: bool,
+    is_be_u16: bool,
 }
 
 impl FieldBuilder {
@@ -69,6 +70,7 @@ impl FieldBuilder {
             mutable: self.mutable,
             is_data: self.is_data,
             value_from_const_generic: self.value_from_const_generic,
+            is_be_u16: self.is_be_u16,
         }
     }
 }
@@ -80,6 +82,7 @@ struct Field {
     mutable: bool,
     is_data: bool,
     value_from_const_generic: bool,
+    is_be_u16: bool,
 }
 
 impl Field {
@@ -91,15 +94,18 @@ impl Field {
             mutable: false,
             is_data: false,
             value_from_const_generic: false,
+            is_be_u16: false,
         }
     }
 
     fn be_u16(name: Ident) -> FieldBuilder {
-        Self::builder(
+        let mut builder = Self::builder(
             name,
             quote! { big_endian::U16 },
             quote! { big_endian::U16::ZERO },
-        )
+        );
+        builder.is_be_u16 = true;
+        builder
     }
 }
 
@@ -348,12 +354,18 @@ fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
             let with_doc = format!("Sets `{name}`, returning `self`.");
             let mut_doc = format!("Returns a mutable reference to `{name}`.");
 
+            let (param_ty, convert) = if field.is_be_u16 {
+                (quote! { u16 }, quote! { big_endian::U16::new(new) })
+            } else {
+                (quote! { #ty }, quote! { new })
+            };
+
             payload_methods.extend(quote! {
                 #[doc = #set_doc]
-                pub const fn #set_name(&mut self, new: #ty) -> &mut Self { self.#name = new; self }
+                pub const fn #set_name(&mut self, new: #param_ty) -> &mut Self { self.#name = #convert; self }
 
                 #[doc = #with_doc]
-                pub const fn #with_name(mut self, new: #ty) -> Self { self.#name = new; self }
+                pub const fn #with_name(mut self, new: #param_ty) -> Self { self.#name = #convert; self }
 
                 #[doc = #mut_doc]
                 pub const fn #name_mut(&mut self) -> &mut #ty { &mut self.#name }
@@ -466,7 +478,7 @@ fn define_client_impl(
             let ty = field.ty;
             let set_name = format_ident!("set_{name}");
             let value = if field.value_from_const_generic {
-                quote! { #ty::from(N as u16) }
+                quote! { N as u16 }
             } else {
                 quote! { #name }
             };
@@ -474,7 +486,12 @@ fn define_client_impl(
             set_calls.extend(quote! { req.pdu_mut().#set_name(#value); });
 
             if !field.value_from_const_generic {
-                args.extend(quote! { #name: #ty, });
+                let arg_ty = if field.is_be_u16 {
+                    quote! { u16 }
+                } else {
+                    ty
+                };
+                args.extend(quote! { #name: #arg_ty, });
             }
         }
     }

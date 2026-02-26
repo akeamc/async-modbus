@@ -10,7 +10,7 @@ use zerocopy::{Immutable, IntoBytes, Unaligned};
 /// # use hex_literal::hex;
 /// use async_modbus::zerocopy::IntoBytes;
 ///
-/// let pdu = WriteHolding::new().with_register(0x10BCu16.into()).with_value(12345u16.into());
+/// let pdu = WriteHolding::new().with_register(0x10BC).with_value(12345);
 /// let frame = Frame::new(0x01, pdu);
 /// assert_eq!(frame.as_bytes(), hex!("01 06 10 BC 30 39 98 FC"));
 /// ```
@@ -38,8 +38,8 @@ pub mod request {
             let frame = FrameBuilder::with_pdu(
                 0x01,
                 ReadHoldings::new()
-                    .with_n_registers(0x03E8.into())
-                    .with_starting_register(0x1001.into()),
+                    .with_n_registers(0x03E8)
+                    .with_starting_register(0x1001),
             )
             .build();
 
