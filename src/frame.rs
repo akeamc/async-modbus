@@ -81,6 +81,7 @@ impl<T> Frame<T> {
 }
 
 /// A builder for [`Frame`]s.
+#[derive(Debug)]
 pub struct FrameBuilder<T> {
     inner: Frame<T>,
 }
@@ -123,5 +124,11 @@ impl<T: Pdu> FrameBuilder<T> {
     /// Access the inner PDU mutably.
     pub fn pdu_mut(&mut self) -> &mut T {
         &mut self.inner.pdu
+    }
+}
+
+impl<T: Pdu> Default for FrameBuilder<T> {
+    fn default() -> Self {
+        Self::new(0)
     }
 }
