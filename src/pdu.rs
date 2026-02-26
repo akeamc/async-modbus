@@ -1,7 +1,9 @@
+//! PDUs in Modbus are everything in between the unit ID and CRC.
+
 use zerocopy::{Immutable, IntoBytes, Unaligned};
 
-/// Modbus request messages. You can use [`zerocopy::IntoBytes`] to convert
-/// them into byte buffers for sending.
+/// Modbus request PDUs. Wrap them in a [`Frame`](crate::Frame) to give them a
+/// unit ID and CRC.
 ///
 /// ```
 /// # use async_modbus::{Frame, pdu::request::WriteHolding};
@@ -46,21 +48,35 @@ pub mod request {
     }
 }
 
+/// Response PDUs!
 pub mod response {
     include!(concat!(env!("OUT_DIR"), "/pdu_res.rs"));
 }
 
+/// A Protocol Data Unit (PDU) contains the function code and data.
 pub trait Pdu: Unaligned + Immutable + IntoBytes {
+    /// The function code of the PDU.
     const FUNCTION_CODE: u8;
 
+    /// Default value for the PDU. Might be all zeros, but not always:
+    ///
+    /// For instance, [`response::ReadHoldings`] is always initialized with a
+    /// default byte count of `2 * N`.
     const DEFAULT: Self;
 }
 
+/// The [`Response`] trait is used to validate a response against a request,
+/// essentially to ensure that the response corresponds to the request.
+///
+/// It also provides a method to convert the response into its data payload.
 pub trait Response<Request>: Pdu {
+    /// The data payload of the response.
     type Data;
 
+    /// Validates the response against the request.
     fn matches_request(&self, request: &Request) -> bool;
 
+    /// Converts the response into its data payload.
     fn into_data(self) -> Self::Data;
 }
 

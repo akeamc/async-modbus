@@ -15,6 +15,22 @@ trait Payload {
         self.fields().into_iter().find(|f| f.is_data)
     }
 
+    fn generic_decl(&self) -> TokenStream {
+        if self.const_generic() {
+            quote! { <const N: usize> }
+        } else {
+            quote! {}
+        }
+    }
+
+    fn generic_use(&self) -> TokenStream {
+        if self.const_generic() {
+            quote! { <N> }
+        } else {
+            quote! {}
+        }
+    }
+
     fn validate_against_counterpart(&self, _counterpart: Ident) -> TokenStream {
         quote! { true }
     }
@@ -136,14 +152,18 @@ impl Payload for MultiReadResponse {
     }
 }
 
+fn single_write_fields() -> Vec<Field> {
+    vec![
+        Field::be_u16(format_ident!("register")).mutable().build(),
+        Field::be_u16(format_ident!("value")).mutable().build(),
+    ]
+}
+
 struct SingleWriteRequest;
 
 impl Payload for SingleWriteRequest {
     fn fields(&self) -> Vec<Field> {
-        vec![
-            Field::be_u16(format_ident!("register")).mutable().build(),
-            Field::be_u16(format_ident!("value")).mutable().build(),
-        ]
+        single_write_fields()
     }
 }
 
@@ -151,10 +171,7 @@ struct SingleWriteResponse;
 
 impl Payload for SingleWriteResponse {
     fn fields(&self) -> Vec<Field> {
-        vec![
-            Field::be_u16(format_ident!("register")).mutable().build(),
-            Field::be_u16(format_ident!("value")).mutable().build(),
-        ]
+        single_write_fields()
     }
 
     fn validate_against_counterpart(&self, counterpart: Ident) -> TokenStream {
@@ -255,7 +272,7 @@ impl Modules {
         self.pdu_req.extend(define_pdu(code, name.clone(), req));
         self.pdu_res.extend(define_pdu(code, name.clone(), res));
         self.pdu_res.extend(impl_response(name.clone(), req, res));
-        self.client.extend(define_client_impl(name, req, res));
+        self.client.extend(define_client_impl(code, name, req, res));
     }
 
     fn write_to_dir(&self, dir: &Path) {
@@ -298,11 +315,11 @@ fn main() {
 }
 
 fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
-    let (generic_decl, generic_use) = if payload.const_generic() {
-        (quote! { <const N: usize> }, quote! { <N> })
-    } else {
-        (quote! {}, quote! {})
-    };
+    let generic_decl = payload.generic_decl();
+    let generic_use = payload.generic_use();
+
+    let struct_doc = format!("`{name}` PDU (function code `0x{code:02X}`).");
+    let new_doc = format!("Creates a new [`{name}`] with default field values.");
 
     let mut payload_fields = TokenStream::new();
     let mut default_payload_fields = TokenStream::new();
@@ -315,7 +332,10 @@ fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
 
         payload_fields.extend(quote! { pub(crate) #name: #ty, });
         default_payload_fields.extend(quote! { #name: #default, });
+
+        let get_doc = format!("Returns a reference to `{name}`.");
         payload_methods.extend(quote! {
+            #[doc = #get_doc]
             pub const fn #name(&self) -> &#ty { &self.#name }
         });
 
@@ -324,17 +344,25 @@ fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
             let with_name = format_ident!("with_{name}");
             let name_mut = format_ident!("{name}_mut");
 
+            let set_doc = format!("Sets `{name}`.");
+            let with_doc = format!("Sets `{name}`, returning `self`.");
+            let mut_doc = format!("Returns a mutable reference to `{name}`.");
+
             payload_methods.extend(quote! {
+                #[doc = #set_doc]
                 pub const fn #set_name(&mut self, new: #ty) -> &mut Self { self.#name = new; self }
 
+                #[doc = #with_doc]
                 pub const fn #with_name(mut self, new: #ty) -> Self { self.#name = new; self }
 
+                #[doc = #mut_doc]
                 pub const fn #name_mut(&mut self) -> &mut #ty { &mut self.#name }
             });
         }
     }
 
     quote! {
+        #[doc = #struct_doc]
         #[derive(Debug, Clone, FromBytes, IntoBytes, Immutable, Unaligned)]
         #[repr(C)]
         pub struct #name #generic_decl {
@@ -343,6 +371,7 @@ fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
         }
 
         impl #generic_decl #name #generic_use {
+            #[doc = #new_doc]
             pub const fn new() -> Self {
                 Self {
                     function_code: <Self as crate::Pdu>::FUNCTION_CODE,
@@ -374,17 +403,10 @@ fn impl_response(name: Ident, req: &impl Payload, res: &impl Payload) -> TokenSt
         quote! {}
     };
 
-    let req_name = if req.const_generic() {
-        quote! { #name::<N> }
-    } else {
-        quote! { #name }
-    };
-
-    let res_name = if res.const_generic() {
-        quote! { #name::<N> }
-    } else {
-        quote! { #name }
-    };
+    let req_gu = req.generic_use();
+    let res_gu = res.generic_use();
+    let req_name = quote! { #name #req_gu };
+    let res_name = quote! { #name #res_gu };
 
     let (data_ty, data_access) = if let Some(f) = res.data_field() {
         let name = f.name;
@@ -410,8 +432,14 @@ fn impl_response(name: Ident, req: &impl Payload, res: &impl Payload) -> TokenSt
     }
 }
 
-fn define_client_impl(name: Ident, req: &impl Payload, res: &impl Payload) -> TokenStream {
+fn define_client_impl(
+    code: u8,
+    name: Ident,
+    req: &impl Payload,
+    res: &impl Payload,
+) -> TokenStream {
     let snake_name = format_ident!("{}", pascal_to_snake(&name.to_string()));
+    let fn_doc = format!("Executes a Modbus `{name}` request (function code `0x{code:02X}`).");
     let name = format_ident!("{}", name);
 
     let generics_decl = if req.const_generic() || res.const_generic() {
@@ -420,17 +448,10 @@ fn define_client_impl(name: Ident, req: &impl Payload, res: &impl Payload) -> To
         quote! { <E> }
     };
 
-    let req_pdu = if req.const_generic() {
-        quote! { request::#name<N> }
-    } else {
-        quote! { request::#name }
-    };
-
-    let res_pdu = if res.const_generic() {
-        quote! { response::#name<N> }
-    } else {
-        quote! { response::#name }
-    };
+    let req_gu = req.generic_use();
+    let res_gu = res.generic_use();
+    let req_pdu = quote! { request::#name #req_gu };
+    let res_pdu = quote! { response::#name #res_gu };
 
     let res_ty = res.data_field().map_or(quote! { () }, |f| f.ty);
     let mut args = quote! {
@@ -459,6 +480,7 @@ fn define_client_impl(name: Ident, req: &impl Payload, res: &impl Payload) -> To
     }
 
     quote! {
+        #[doc = #fn_doc]
         pub async fn #snake_name #generics_decl (#args) -> Result<#res_ty, Error<E>> {
             let mut req = Frame::<#req_pdu>::builder(address);
             #set_calls

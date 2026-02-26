@@ -6,6 +6,7 @@ use crate::{
     pdu::{CrcError, Response, ValidationError},
 };
 
+/// A complete Modbus frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, IntoBytes, Unaligned, Immutable, FromBytes)]
 #[repr(C)]
 pub struct Frame<T> {
@@ -15,6 +16,8 @@ pub struct Frame<T> {
 }
 
 impl<T> Frame<T> {
+    /// Creates a new frame with the given unit ID and PDU and calculates the
+    /// CRC.
     pub fn new(unit_id: u8, pdu: T) -> Self
     where
         T: Pdu,
@@ -32,6 +35,7 @@ impl<T> Frame<T> {
         }
     }
 
+    /// Creates a new [`FrameBuilder`].
     pub const fn builder(unit_id: u8) -> FrameBuilder<T>
     where
         T: Pdu,
@@ -55,6 +59,7 @@ impl<T> Frame<T> {
         self.crc = self.calculate_crc().into();
     }
 
+    /// Validate the frame against the given request, returning the data if valid.
     pub fn into_data<Request>(self, request: &Frame<Request>) -> Result<T::Data, ValidationError>
     where
         T: Response<Request>,
@@ -75,11 +80,16 @@ impl<T> Frame<T> {
     }
 }
 
+/// A builder for [`Frame`]s.
 pub struct FrameBuilder<T> {
     inner: Frame<T>,
 }
 
 impl<T: Pdu> FrameBuilder<T> {
+    /// Creates a new builder with the given unit ID and PDU.
+    ///
+    /// This is different from [`Frame::new`] in that no CRC is calculated at
+    /// this point.
     pub const fn with_pdu(unit_id: u8, pdu: T) -> Self {
         Self {
             // crc is calculated later
@@ -87,20 +97,25 @@ impl<T: Pdu> FrameBuilder<T> {
         }
     }
 
+    /// Creates a new builder with the given unit ID and default PDU value.
     pub const fn new(unit_id: u8) -> Self {
         Self::with_pdu(unit_id, T::DEFAULT)
     }
 
+    /// Build a frame but don't move it out of the builder, so that the builder
+    /// can be recycled.
     pub fn build_ref(&mut self) -> &mut Frame<T> {
         self.inner.update_crc();
         &mut self.inner
     }
 
+    /// Build a frame (calculate its CRC) and move it out of the builder.
     pub fn build(mut self) -> Frame<T> {
         self.inner.update_crc();
         self.inner
     }
 
+    /// Access the inner PDU mutably.
     pub fn pdu_mut(&mut self) -> &mut T {
         &mut self.inner.pdu
     }
