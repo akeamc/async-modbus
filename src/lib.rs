@@ -1,22 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-// #[cfg(feature = "embedded-io")]
-// pub mod embedded_io;
-
-// mod error;
+#[cfg(feature = "embedded-io")]
+pub mod client;
 mod frame;
+pub mod pdu;
 mod util;
 
-mod pdu;
-
-pub use frame::Frame;
-
-// pub mod request;
-// pub mod response;
-
-// pub use error::*;
+pub use ::zerocopy;
+pub use frame::*;
+pub use pdu::Pdu;
 pub use util::crc;
-
-// pub use zerocopy;

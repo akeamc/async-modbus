@@ -1,6 +1,6 @@
 use std::{array, future::Ready, sync::Mutex};
 
-use async_modbus::embedded_io::{read_holdings, read_inputs, write_holding, write_holdings};
+use async_modbus::client::{read_holdings, read_inputs, write_holding, write_holdings};
 use embedded_io_adapters::tokio_1::FromTokio;
 use tokio_modbus::{ExceptionCode, Request, server::Service};
 use tokio_serial::SerialStream;
@@ -87,12 +87,15 @@ async fn test_server() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut s = FromTokio::new(client);
 
-    assert_eq!(read_holdings(&mut s, 1, 4).await?, [4, 5, 6, 7]);
-    write_holding(&mut s, 1, 4, 104).await?;
-    write_holdings(&mut s, 1, 6, [59]).await?;
-    assert_eq!(read_holdings(&mut s, 1, 2).await?, [2, 3, 104, 5, 59, 7, 8]);
+    assert_eq!(read_holdings(&mut s, 1, 4u16.into()).await?, [4, 5, 6, 7]);
+    write_holding(&mut s, 1, 4u16.into(), 104u16.into()).await?;
+    write_holdings(&mut s, 1, 6u16.into(), [59u16.into()]).await?;
+    assert_eq!(
+        read_holdings(&mut s, 1, 2u16.into()).await?,
+        [2, 3, 104, 5, 59, 7, 8]
+    );
 
-    assert_eq!(read_inputs(&mut s, 1, 0).await?, [40_960, 40_961]);
+    assert_eq!(read_inputs(&mut s, 1, 0u16.into()).await?, [40_960, 40_961]);
 
     Ok(())
 }

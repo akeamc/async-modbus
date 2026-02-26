@@ -2,89 +2,489 @@ use std::path::Path;
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
+use syn::Ident;
 
-enum ConstGeneric {
-    None,
-    Request,
-    Response,
+trait Payload {
+    fn const_generic(&self) -> bool {
+        false
+    }
+
+    fn fields(&self) -> Vec<Field>;
+
+    fn data_field(&self) -> Option<Field> {
+        self.fields().into_iter().find(|f| f.is_data)
+    }
+
+    fn validate_against_counterpart(&self, _counterpart: Ident) -> TokenStream {
+        quote! { true }
+    }
+}
+
+struct FieldBuilder {
+    name: Ident,
+    ty: TokenStream,
+    default_value: TokenStream,
+    mutable: bool,
+    is_data: bool,
+    value_from_const_generic: bool,
+}
+
+impl FieldBuilder {
+    fn mutable(mut self) -> Self {
+        self.mutable = true;
+        self
+    }
+
+    fn data(mut self) -> Self {
+        self.is_data = true;
+        self
+    }
+
+    fn value_from_const_generic(mut self) -> Self {
+        self.value_from_const_generic = true;
+        self
+    }
+
+    fn build(self) -> Field {
+        Field {
+            name: self.name,
+            ty: self.ty,
+            default_value: self.default_value,
+            mutable: self.mutable,
+            is_data: self.is_data,
+            value_from_const_generic: self.value_from_const_generic,
+        }
+    }
+}
+
+struct Field {
+    name: Ident,
+    ty: TokenStream,
+    default_value: TokenStream,
+    mutable: bool,
+    is_data: bool,
+    value_from_const_generic: bool,
+}
+
+impl Field {
+    fn builder(name: Ident, ty: TokenStream, default_value: TokenStream) -> FieldBuilder {
+        FieldBuilder {
+            name,
+            ty,
+            default_value,
+            mutable: false,
+            is_data: false,
+            value_from_const_generic: false,
+        }
+    }
+
+    fn be_u16(name: Ident) -> FieldBuilder {
+        Self::builder(
+            name,
+            quote! { big_endian::U16 },
+            quote! { big_endian::U16::ZERO },
+        )
+    }
+}
+
+struct MultiReadRequest;
+
+impl Payload for MultiReadRequest {
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::be_u16(format_ident!("starting_register"))
+                .mutable()
+                .build(),
+            Field::be_u16(format_ident!("n_registers"))
+                .mutable()
+                .value_from_const_generic()
+                .build(),
+        ]
+    }
+}
+
+struct MultiReadResponse;
+
+impl Payload for MultiReadResponse {
+    fn const_generic(&self) -> bool {
+        true
+    }
+
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::builder(
+                format_ident!("byte_count"),
+                quote! { u8 },
+                quote! { 2 * N as u8 },
+            )
+            .build(),
+            Field::builder(
+                format_ident!("data"),
+                quote! { [big_endian::U16; N] },
+                quote! { [big_endian::U16::ZERO; N] },
+            )
+            .mutable()
+            .data()
+            .build(),
+        ]
+    }
+
+    fn validate_against_counterpart(&self, counterpart: Ident) -> TokenStream {
+        quote! {
+            self.byte_count as u16 == 2 * #counterpart.n_registers.get()
+        }
+    }
+}
+
+struct SingleWriteRequest;
+
+impl Payload for SingleWriteRequest {
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::be_u16(format_ident!("register")).mutable().build(),
+            Field::be_u16(format_ident!("value")).mutable().build(),
+        ]
+    }
+}
+
+struct SingleWriteResponse;
+
+impl Payload for SingleWriteResponse {
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::be_u16(format_ident!("register")).mutable().build(),
+            Field::be_u16(format_ident!("value")).mutable().build(),
+        ]
+    }
+
+    fn validate_against_counterpart(&self, counterpart: Ident) -> TokenStream {
+        quote! {
+            self.register == #counterpart.register
+                && self.value == #counterpart.value
+        }
+    }
+}
+
+struct MultiWriteRequest;
+
+impl Payload for MultiWriteRequest {
+    fn const_generic(&self) -> bool {
+        true
+    }
+
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::be_u16(format_ident!("starting_register"))
+                .mutable()
+                .build(),
+            Field::builder(
+                format_ident!("n_registers"),
+                quote! { big_endian::U16 },
+                quote! { big_endian::U16::new(N as u16) },
+            )
+            .build(),
+            Field::builder(
+                format_ident!("data_bytes"),
+                quote! { u8 },
+                quote! { 2 * N as u8 },
+            )
+            .build(),
+            Field::builder(
+                format_ident!("data"),
+                quote! { [big_endian::U16; N] },
+                quote! { [big_endian::U16::ZERO; N] },
+            )
+            .mutable()
+            .data()
+            .build(),
+        ]
+    }
+}
+
+struct MultiWriteResponse;
+
+impl Payload for MultiWriteResponse {
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::be_u16(format_ident!("starting_register"))
+                .mutable()
+                .build(),
+            Field::be_u16(format_ident!("quantity")).mutable().build(),
+        ]
+    }
+
+    fn validate_against_counterpart(&self, counterpart: Ident) -> TokenStream {
+        quote! {
+            self.starting_register == #counterpart.starting_register
+                && self.quantity.get() == N as u16
+        }
+    }
+}
+
+struct Modules {
+    pdu_req: TokenStream,
+    pdu_res: TokenStream,
+    client: TokenStream,
+}
+
+impl Modules {
+    fn new() -> Self {
+        let pdu_scaffold = quote! {
+            use super::Response;
+
+            use zerocopy_derive::*;
+            use zerocopy::big_endian;
+        };
+
+        Self {
+            pdu_req: pdu_scaffold.clone(),
+            pdu_res: pdu_scaffold.clone(),
+            client: quote! {
+                use zerocopy::big_endian;
+                use embedded_io_async::{Read, Write};
+
+                use super::*;
+                use crate::{pdu::{request, response}, Frame};
+            },
+        }
+    }
+
+    fn define_function(&mut self, code: u8, name: &str, req: &impl Payload, res: &impl Payload) {
+        let name = format_ident!("{name}");
+
+        self.pdu_req.extend(define_pdu(code, name.clone(), req));
+        self.pdu_res.extend(define_pdu(code, name.clone(), res));
+        self.pdu_res.extend(impl_response(name.clone(), req, res));
+        self.client.extend(define_client_impl(name, req, res));
+    }
+
+    fn write_to_dir(&self, dir: &Path) {
+        write_rust(dir.join("pdu_req.rs"), &self.pdu_req);
+        write_rust(dir.join("pdu_res.rs"), &self.pdu_res);
+        write_rust(dir.join("client.rs"), &self.client);
+    }
 }
 
 fn main() {
-    // let out_dir = std::env::var_os("OUT_DIR").unwrap();
-    let out_dir = "src";
-    let dest_path = Path::new(&out_dir).join("pdu.rs");
+    let out_dir = std::env::var_os("OUT_DIR").unwrap();
 
-    let mut output = quote! {
-        use crate::Frame;
+    let mut modules = Modules::new();
 
-        use zerocopy_derive::*;
-    };
-
-    define_function(&mut output, 0x01, "ReadCoils", ConstGeneric::Response);
-    define_function(
-        &mut output,
+    modules.define_function(0x01, "ReadCoils", &MultiReadRequest, &MultiReadResponse);
+    modules.define_function(
         0x02,
         "ReadDiscreteInputs",
-        ConstGeneric::Response,
+        &MultiReadRequest,
+        &MultiReadResponse,
     );
-    define_function(
-        &mut output,
-        0x03,
-        "ReadHoldingRegisters",
-        ConstGeneric::Response,
+    modules.define_function(0x03, "ReadHoldings", &MultiReadRequest, &MultiReadResponse);
+    modules.define_function(0x04, "ReadInputs", &MultiReadRequest, &MultiReadResponse);
+    modules.define_function(
+        0x06,
+        "WriteHolding",
+        &SingleWriteRequest,
+        &SingleWriteResponse,
     );
-    define_function(
-        &mut output,
-        0x04,
-        "ReadInputRegisters",
-        ConstGeneric::Response,
+    modules.define_function(
+        0x10,
+        "WriteHoldings",
+        &MultiWriteRequest,
+        &MultiWriteResponse,
     );
 
-    std::fs::write(&dest_path, format_rust(output)).unwrap();
+    modules.write_to_dir(Path::new(&out_dir));
 
     println!("cargo:rerun-if-changed=build.rs");
 }
 
-fn define_function(
-    output: &mut TokenStream,
-    code: u8,
-    name: &'static str,
-    const_generic: ConstGeneric,
-) {
-    let name = format_ident!("{name}");
-    let builder_name = format_ident!("{name}Builder");
-
-    let (generic_decl, generic_use) = match const_generic {
-        ConstGeneric::Response => (quote! { <const N: usize> }, quote! { <N> }),
-        _ => (quote! {}, quote! {}),
+fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
+    let (generic_decl, generic_use) = if payload.const_generic() {
+        (quote! { <const N: usize> }, quote! { <N> })
+    } else {
+        (quote! {}, quote! {})
     };
 
-    output.extend(quote! {
+    let mut payload_fields = TokenStream::new();
+    let mut default_payload_fields = TokenStream::new();
+    let mut payload_methods = TokenStream::new();
+
+    for field in payload.fields() {
+        let name = field.name;
+        let ty = field.ty;
+        let default = field.default_value;
+
+        payload_fields.extend(quote! { pub(crate) #name: #ty, });
+        default_payload_fields.extend(quote! { #name: #default, });
+        payload_methods.extend(quote! {
+            pub const fn #name(&self) -> &#ty { &self.#name }
+        });
+
+        if field.mutable {
+            let set_name = format_ident!("set_{name}");
+            let with_name = format_ident!("with_{name}");
+            let name_mut = format_ident!("{name}_mut");
+
+            payload_methods.extend(quote! {
+                pub const fn #set_name(&mut self, new: #ty) -> &mut Self { self.#name = new; self }
+
+                pub const fn #with_name(mut self, new: #ty) -> Self { self.#name = new; self }
+
+                pub const fn #name_mut(&mut self) -> &mut #ty { &mut self.#name }
+            });
+        }
+    }
+
+    quote! {
         #[derive(Debug, Clone, FromBytes, IntoBytes, Immutable, Unaligned)]
         #[repr(C)]
         pub struct #name #generic_decl {
             function_code: u8,
+            #payload_fields
         }
 
         impl #generic_decl #name #generic_use {
-            pub const FUNCTION_CODE: u8 = #code;
-
             pub const fn new() -> Self {
-                Self { function_code: Self::FUNCTION_CODE }
+                Self {
+                    function_code: <Self as crate::Pdu>::FUNCTION_CODE,
+                    #default_payload_fields
+                }
             }
+
+            #payload_methods
         }
 
-        pub struct #builder_name #generic_decl (Frame<#name #generic_use>);
+        impl #generic_decl crate::Pdu for #name #generic_use {
+            const FUNCTION_CODE: u8 = #code;
 
-        impl #generic_decl #builder_name #generic_use {
-            pub const fn new(server_address: u8) -> Self {
-                Self(Frame::new(server_address, <#name #generic_use>::new()))
+            const DEFAULT: Self = Self::new();
+        }
+
+        impl #generic_decl Default for #name #generic_use {
+            fn default() -> Self {
+                crate::Pdu::DEFAULT
             }
         }
-    });
+    }
 }
 
-fn format_rust(contents: impl ToTokens) -> String {
+fn impl_response(name: Ident, req: &impl Payload, res: &impl Payload) -> TokenStream {
+    let generics_decl = if req.const_generic() || res.const_generic() {
+        quote! { <const N: usize> }
+    } else {
+        quote! {}
+    };
+
+    let req_name = if req.const_generic() {
+        quote! { #name::<N> }
+    } else {
+        quote! { #name }
+    };
+
+    let res_name = if res.const_generic() {
+        quote! { #name::<N> }
+    } else {
+        quote! { #name }
+    };
+
+    let (data_ty, data_access) = if let Some(f) = res.data_field() {
+        let name = f.name;
+        (f.ty, quote! { self.#name })
+    } else {
+        (quote! { () }, quote! {})
+    };
+
+    let fn_body = res.validate_against_counterpart(format_ident!("req"));
+
+    quote! {
+        impl #generics_decl Response<super::request::#req_name> for #res_name {
+            type Data = #data_ty;
+
+            fn matches_request(&self, req: &super::request::#req_name) -> bool {
+                #fn_body
+            }
+
+            fn into_data(self) -> Self::Data {
+                #data_access
+            }
+        }
+    }
+}
+
+fn define_client_impl(name: Ident, req: &impl Payload, res: &impl Payload) -> TokenStream {
+    let snake_name = format_ident!("{}", pascal_to_snake(&name.to_string()));
+    let name = format_ident!("{}", name);
+
+    let generics_decl = if req.const_generic() || res.const_generic() {
+        quote! { <const N: usize, E> }
+    } else {
+        quote! { <E> }
+    };
+
+    let req_pdu = if req.const_generic() {
+        quote! { request::#name<N> }
+    } else {
+        quote! { request::#name }
+    };
+
+    let res_pdu = if res.const_generic() {
+        quote! { response::#name<N> }
+    } else {
+        quote! { response::#name }
+    };
+
+    let res_ty = res.data_field().map_or(quote! { () }, |f| f.ty);
+    let mut args = quote! {
+        mut serial: impl Read<Error = E> + Write<Error = E>,
+        address: u8,
+    };
+    let mut set_calls = quote! {};
+
+    for field in req.fields() {
+        if field.mutable {
+            let name = field.name;
+            let ty = field.ty;
+            let set_name = format_ident!("set_{name}");
+            let value = if field.value_from_const_generic {
+                quote! { #ty::from(N as u16) }
+            } else {
+                quote! { #name }
+            };
+
+            set_calls.extend(quote! { req.pdu_mut().#set_name(#value); });
+
+            if !field.value_from_const_generic {
+                args.extend(quote! { #name: #ty, });
+            }
+        }
+    }
+
+    quote! {
+        pub async fn #snake_name #generics_decl (#args) -> Result<#res_ty, Error<E>> {
+            let mut req = Frame::<#req_pdu>::builder(address);
+            #set_calls
+            let req = req.build_ref();
+            write_frame(&mut serial, req).await.map_err(Error::Io)?;
+
+            let res: Frame::<#res_pdu> = read_frame(&mut serial).await?;
+            Ok(res.into_data(req)?)
+        }
+    }
+}
+
+fn pascal_to_snake(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for (i, c) in s.char_indices() {
+        if c.is_uppercase() && i > 0 {
+            out.push('_');
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    out
+}
+
+fn write_rust(path: impl AsRef<Path>, contents: impl ToTokens) {
     let contents = syn::parse2(contents.to_token_stream()).expect("unable to parse tokens");
-    prettyplease::unparse(&contents)
+    let formatted = prettyplease::unparse(&contents);
+
+    std::fs::write(path, formatted).expect("unable to write file");
 }
