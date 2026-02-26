@@ -102,6 +102,11 @@ impl<T: Pdu> FrameBuilder<T> {
         Self::with_pdu(unit_id, T::DEFAULT)
     }
 
+    /// Changes the unit ID.
+    pub const fn set_unit_id(&mut self, unit_id: u8) {
+        self.inner.unit_id = unit_id;
+    }
+
     /// Build a frame but don't move it out of the builder, so that the builder
     /// can be recycled.
     pub fn build_ref(&mut self) -> &mut Frame<T> {
