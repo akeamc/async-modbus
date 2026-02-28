@@ -231,13 +231,12 @@ impl PduView {
     ///
     /// let read_holdings = pdu.parse::<response::ReadHoldings::<2>>().unwrap();
     ///
-    /// assert_eq!(read_holdings.byte_count(), 2);
+    /// assert_eq!(*read_holdings.byte_count(), 4);
     /// assert_eq!(read_holdings.data().map(|d| d.get()), [0x00_01, 0x76_3B]);
     /// ```
     #[inline]
     pub fn parse<T: Pdu>(&self) -> Option<&T> {
         if self.function_code == T::FUNCTION_CODE {
-            println!("{:x?}", self.as_bytes());
             T::try_ref_from_bytes(self.as_bytes()).ok()
         } else {
             None
