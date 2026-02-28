@@ -455,9 +455,9 @@ fn define_client_impl(
     let name = format_ident!("{}", name);
 
     let generics_decl = if req.const_generic() || res.const_generic() {
-        quote! { <const N: usize, E> }
+        quote! { <const N: usize, E: embedded_io_async::Error> }
     } else {
-        quote! { <E> }
+        quote! { <E: embedded_io_async::Error> }
     };
 
     let req_gu = req.generic_use();

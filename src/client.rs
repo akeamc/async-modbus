@@ -1,5 +1,7 @@
 //! Client functions for [`embedded_io_async`]-based IO.
 
+use core::error::Error as CoreError;
+
 use embedded_io_async::{Read, ReadExactError, Write};
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -30,7 +32,7 @@ where
 
 /// Errors that can occur when talking to a Modbus server.
 #[derive(Debug, thiserror_no_std::Error)]
-pub enum Error<Io> {
+pub enum Error<Io: CoreError> {
     /// IO error.
     #[error(transparent)]
     Io(Io),
@@ -45,7 +47,7 @@ pub enum Error<Io> {
     UnexpectedResponse,
 }
 
-impl<E> From<ValidationError> for Error<E> {
+impl<E: CoreError> From<ValidationError> for Error<E> {
     fn from(e: ValidationError) -> Self {
         match e {
             ValidationError::Crc(crc) => Error::Crc(crc),
@@ -54,7 +56,7 @@ impl<E> From<ValidationError> for Error<E> {
     }
 }
 
-impl<E> From<ReadExactError<E>> for Error<E> {
+impl<E: CoreError> From<ReadExactError<E>> for Error<E> {
     fn from(e: ReadExactError<E>) -> Self {
         match e {
             ReadExactError::Other(e) => Self::Io(e),
