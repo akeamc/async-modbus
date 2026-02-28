@@ -1,4 +1,4 @@
-use zerocopy::{Immutable, IntoBytes, Unaligned, little_endian};
+use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, little_endian, try_transmute_ref};
 use zerocopy_derive::*;
 
 use crate::{
@@ -78,6 +78,16 @@ impl<T> Frame<T> {
 
         Ok(self.pdu.into_data())
     }
+
+    /// Upcast the frame to an [`FrameView`].
+    pub fn view(&self) -> FrameView<'_>
+    where
+        T: IntoBytes + Unaligned + Immutable,
+    {
+        FrameView {
+            buf: self.as_bytes(),
+        }
+    }
 }
 
 /// A builder for [`Frame`]s.
@@ -130,5 +140,107 @@ impl<T: Pdu> FrameBuilder<T> {
 impl<T: Pdu> Default for FrameBuilder<T> {
     fn default() -> Self {
         Self::new(0)
+    }
+}
+
+/// A frame with an unknown PDU type.
+///
+/// ```
+/// # use hex_literal::hex;
+/// # use async_modbus::FrameView;
+/// let frame = FrameView::try_from_bytes(&hex!("01 06 00 04 00 02 49 CA")).unwrap();
+///
+/// assert_eq!(frame.unit_id(), 1);
+/// assert!(frame.validate_crc().is_ok());
+/// ```
+pub struct FrameView<'a> {
+    buf: &'a [u8],
+}
+
+impl<'a> FrameView<'a> {
+    /// Parse a frame from a byte slice. This method does not validate the CRC
+    /// or the PDU contents, only that the frame has a valid length.
+    pub fn try_from_bytes(buf: &'a [u8]) -> Option<Self> {
+        if (4..=256).contains(&buf.len()) {
+            Some(Self { buf })
+        } else {
+            None
+        }
+    }
+
+    /// The unit ID of the frame.
+    pub const fn unit_id(&self) -> u8 {
+        self.buf[0]
+    }
+
+    /// The CRC sent with the frame. This struct does not guarantee that the
+    /// CRC is valid; be sure to check it with [`FrameView::validate_crc`].
+    pub const fn crc(&self) -> u16 {
+        u16::from_le_bytes([self.buf[self.buf.len() - 2], self.buf[self.buf.len() - 1]])
+    }
+
+    fn calculate_crc(&self) -> u16 {
+        crate::crc(&self.buf[..self.buf.len() - 2])
+    }
+
+    /// Returns the wrapped PDU if the CRC is valid.
+    pub fn pdu(self) -> Result<&'a PduView, CrcError> {
+        self.validate_crc()?;
+        Ok(
+            PduView::ref_from_bytes(&self.buf[1..self.buf.len() - 2])
+                .expect("PduView is Unaligned"),
+        )
+    }
+
+    /// Validate the CRC of the frame.
+    ///
+    /// Note that [`FrameView::pdu`] validates the CRC before returning
+    /// the PDU, rendering this method unnecessary to call directly in most
+    /// cases.
+    pub fn validate_crc(&self) -> Result<(), CrcError> {
+        if self.calculate_crc() == self.crc() {
+            Ok(())
+        } else {
+            Err(CrcError)
+        }
+    }
+}
+
+/// The most generic Modbus PDU, containing a function code and data payload.
+#[derive(Debug, FromBytes, KnownLayout, Immutable, IntoBytes, Unaligned)]
+#[repr(C)]
+pub struct PduView {
+    /// The function code of the PDU.
+    pub function_code: u8,
+    /// The data payload of the PDU.
+    pub data: [u8],
+}
+
+impl PduView {
+    /// Parse into a concrete PDU type. Will return `None` upon a function code
+    /// or size mismatch.
+    #[inline]
+    pub fn parse<T: Pdu>(&self) -> Option<&T> {
+        if self.function_code == T::FUNCTION_CODE {
+            try_transmute_ref!(self).ok()
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hex_literal::hex;
+
+    use super::*;
+
+    #[test]
+    fn test_length_validation() {
+        assert!(FrameView::try_from_bytes(&hex!()).is_none());
+        assert!(FrameView::try_from_bytes(&hex!("00 00 00")).is_none());
+        assert!(FrameView::try_from_bytes(&hex!("00 00 00 00")).is_some());
+        assert!(FrameView::try_from_bytes(&[0; 256]).is_some());
+        assert!(FrameView::try_from_bytes(&[0; 257]).is_none());
     }
 }

@@ -1,6 +1,6 @@
 //! PDUs in Modbus are everything in between the unit ID and CRC.
 
-use zerocopy::{Immutable, IntoBytes, Unaligned};
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 /// Modbus request PDUs. Wrap them in a [`Frame`](crate::Frame) to give them a
 /// unit ID and CRC.
@@ -54,7 +54,7 @@ pub mod response {
 }
 
 /// A Protocol Data Unit (PDU) contains the function code and data.
-pub trait Pdu: Unaligned + Immutable + IntoBytes {
+pub trait Pdu: Unaligned + Immutable + IntoBytes + TryFromBytes + KnownLayout {
     /// The function code of the PDU.
     const FUNCTION_CODE: u8;
 
@@ -82,11 +82,13 @@ pub trait Response<Request>: Pdu {
 
 /// Error indicating a CRC validation failure.
 #[derive(Debug, Clone, Copy, thiserror_no_std::Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[error("CRC validation failed")]
 pub struct CrcError;
 
 /// Errors that can occur when validating a Modbus response.
 #[derive(Debug, thiserror_no_std::Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ValidationError {
     /// CRC validation failed.
     #[error(transparent)]

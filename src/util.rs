@@ -1,17 +1,23 @@
 /// CRC for Modbus RTU messages.
-pub fn crc(data: &[u8]) -> u16 {
+pub const fn crc(data: &[u8]) -> u16 {
     let mut crc = 0xffff;
+    let mut i = 0;
 
-    for &byte in data {
-        crc ^= u16::from(byte);
-        for _ in 0..8 {
+    while i < data.len() {
+        crc ^= data[i] as u16;
+        let mut j = 0;
+        while j < 8 {
             if (crc & 0x0001) != 0 {
                 crc >>= 1;
                 crc ^= 0xa001;
             } else {
                 crc >>= 1;
             }
+
+            j += 1;
         }
+
+        i += 1;
     }
 
     crc

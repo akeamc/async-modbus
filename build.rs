@@ -375,7 +375,7 @@ fn define_pdu(code: u8, name: Ident, payload: &impl Payload) -> TokenStream {
 
     quote! {
         #[doc = #struct_doc]
-        #[derive(Debug, Clone, FromBytes, IntoBytes, Immutable, Unaligned)]
+        #[derive(Debug, Clone, FromBytes, IntoBytes, Immutable, Unaligned, KnownLayout)]
         #[repr(C)]
         pub struct #name #generic_decl {
             function_code: u8,
