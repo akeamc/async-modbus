@@ -1,4 +1,4 @@
-use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, little_endian, try_transmute_ref};
+use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, little_endian};
 use zerocopy_derive::*;
 
 use crate::{
@@ -219,10 +219,26 @@ pub struct PduView {
 impl PduView {
     /// Parse into a concrete PDU type. Will return `None` upon a function code
     /// or size mismatch.
+    ///
+    /// ```
+    /// # use hex_literal::hex;
+    /// # use async_modbus::{FrameView, PduView};
+    /// # use async_modbus::pdu::response;
+    /// let pdu = FrameView::try_from_bytes(&hex!("01 03 04 00 01 76 3B CC 40"))
+    ///     .unwrap()
+    ///     .pdu()
+    ///     .unwrap();
+    ///
+    /// let read_holdings = pdu.parse::<response::ReadHoldings::<2>>().unwrap();
+    ///
+    /// assert_eq!(read_holdings.byte_count(), 2);
+    /// assert_eq!(read_holdings.data().map(|d| d.get()), [0x00_01, 0x76_3B]);
+    /// ```
     #[inline]
     pub fn parse<T: Pdu>(&self) -> Option<&T> {
         if self.function_code == T::FUNCTION_CODE {
-            try_transmute_ref!(self).ok()
+            println!("{:x?}", self.as_bytes());
+            T::try_ref_from_bytes(self.as_bytes()).ok()
         } else {
             None
         }
