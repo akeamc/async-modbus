@@ -31,7 +31,8 @@ where
 }
 
 /// Errors that can occur when talking to a Modbus server.
-#[derive(Debug, thiserror_no_std::Error)]
+#[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error<Io: CoreError> {
     /// IO error.
     #[error(transparent)]

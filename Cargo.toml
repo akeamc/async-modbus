@@ -4,19 +4,19 @@ description = "A lightweight asynchronous Modbus protocol implementation for emb
 license = "MIT"
 documentation = "https://docs.rs/async-modbus"
 repository = "https://github.com/akeamc/async-modbus"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 
 [features]
 default = ["embedded-io", "std"]
 embedded-io = ["dep:embedded-io-async"]
-std = ["thiserror-no-std/std"]
+std = ["thiserror/std"]
 defmt = ["dep:defmt"]
 
 [dependencies]
 defmt = { version = "1.0.1", optional = true }
 embedded-io-async = { version = "0.7.0", optional = true }
-thiserror-no-std = "2.0.2"
+thiserror = { version = "2.0.18", default-features = false }
 zerocopy = "0.8.40"
 zerocopy-derive = "0.8.40"
 

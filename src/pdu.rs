@@ -81,13 +81,13 @@ pub trait Response<Request>: Pdu {
 }
 
 /// Error indicating a CRC validation failure.
-#[derive(Debug, Clone, Copy, thiserror_no_std::Error)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[error("CRC validation failed")]
 pub struct CrcError;
 
 /// Errors that can occur when validating a Modbus response.
-#[derive(Debug, thiserror_no_std::Error)]
+#[derive(Debug, thiserror::Error)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ValidationError {
     /// CRC validation failed.
