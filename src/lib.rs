@@ -6,9 +6,7 @@
 pub mod client;
 mod frame;
 pub mod pdu;
-mod util;
 
 pub use frame::*;
 pub use pdu::Pdu;
-pub use util::crc;
 pub use zerocopy;

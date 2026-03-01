@@ -6,6 +6,8 @@ use crate::{
     pdu::{CrcError, Response, ValidationError},
 };
 
+const MODBUS_CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_MODBUS);
+
 /// A complete Modbus frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, IntoBytes, Unaligned, Immutable, FromBytes)]
 #[repr(C)]
@@ -49,7 +51,7 @@ impl<T> Frame<T> {
     {
         let bytes = self.as_bytes();
         // The last two bytes are the CRC itself
-        crate::crc(&bytes[..bytes.len() - 2])
+        MODBUS_CRC.checksum(&bytes[..bytes.len() - 2])
     }
 
     fn update_crc(&mut self)
@@ -180,7 +182,7 @@ impl<'a> FrameView<'a> {
     }
 
     fn calculate_crc(&self) -> u16 {
-        crate::crc(&self.buf[..self.buf.len() - 2])
+        MODBUS_CRC.checksum(&self.buf[..self.buf.len() - 2])
     }
 
     /// Returns the wrapped PDU if the CRC is valid.
