@@ -451,6 +451,8 @@ fn define_client_impl(
     res: &impl Payload,
 ) -> TokenStream {
     let snake_name = format_ident!("{}", pascal_to_snake(&name.to_string()));
+    let snake_name_with = format_ident!("{snake_name}_with");
+
     let fn_doc = format!("Executes a Modbus `{name}` request (function code `0x{code:02X}`).");
     let name = format_ident!("{}", name);
 
@@ -467,7 +469,7 @@ fn define_client_impl(
 
     let res_ty = res.data_field().map_or(quote! { () }, |f| f.ty);
     let mut args = quote! {
-        mut serial: impl Read<Error = E> + Write<Error = E>,
+        serial: impl Read<Error = E> + Write<Error = E>,
         address: u8,
     };
     let mut set_calls = quote! {};
@@ -498,14 +500,23 @@ fn define_client_impl(
 
     quote! {
         #[doc = #fn_doc]
-        pub async fn #snake_name #generics_decl (#args) -> Result<#res_ty, Error<E>> {
-            let mut req = Frame::<#req_pdu>::builder(address);
-            #set_calls
-            let req = req.build_ref();
+        pub async fn #snake_name_with #generics_decl (
+            mut serial: impl Read<Error = E> + Write<Error = E>,
+            req: &Frame<#req_pdu>,
+        ) -> Result<#res_ty, Error<E>> {
             write_frame(&mut serial, req).await.map_err(Error::Io)?;
 
             let res: Frame::<#res_pdu> = read_frame(&mut serial).await?;
             Ok(res.into_data(req)?)
+        }
+
+        #[doc = #fn_doc]
+        pub async fn #snake_name #generics_decl (#args) -> Result<#res_ty, Error<E>> {
+            let mut req = Frame::<#req_pdu>::builder(address);
+            #set_calls
+            let req = req.build_ref();
+
+            #snake_name_with(serial, req).await
         }
     }
 }

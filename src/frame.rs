@@ -133,6 +133,11 @@ impl<T: Pdu> FrameBuilder<T> {
         self.inner
     }
 
+    /// Get a reference to the inner PDU.
+    pub fn pdu(&self) -> &T {
+        &self.inner.pdu
+    }
+
     /// Access the inner PDU mutably.
     pub fn pdu_mut(&mut self) -> &mut T {
         &mut self.inner.pdu
