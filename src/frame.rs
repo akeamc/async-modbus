@@ -1,3 +1,4 @@
+use defmt_or_log::*;
 use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, little_endian};
 use zerocopy_derive::*;
 
@@ -71,10 +72,15 @@ impl<T> Frame<T> {
         }
 
         if self.unit_id != request.unit_id {
+            debug!(
+                "Request unit id 0x{:02X} does not match response unit id 0x{:02X}",
+                request.unit_id, self.unit_id
+            );
             return Err(ValidationError::UnexpectedResponse);
         }
 
         if !self.pdu.matches_request(&request.pdu) {
+            debug!("Request PDU does not match response PDU");
             return Err(ValidationError::UnexpectedResponse);
         }
 
