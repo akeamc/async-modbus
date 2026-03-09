@@ -62,14 +62,36 @@ impl<T> Frame<T> {
         self.crc = self.calculate_crc().into();
     }
 
+    /// Validates the CRC of the frame. [`Self::into_data`] will also validate
+    /// the CRC, so in most cases you should not need to call this method
+    /// directly.
+    pub fn validate_crc(&self) -> Result<(), CrcError>
+    where
+        T: IntoBytes + Unaligned + Immutable,
+    {
+        if self.calculate_crc() == self.crc.get() {
+            Ok(())
+        } else {
+            Err(CrcError)
+        }
+    }
+
+    /// Returns the unit ID of the frame.
+    pub fn unit_id(&self) -> u8 {
+        self.unit_id
+    }
+
+    /// Returns a reference to the PDU of the frame.
+    pub fn pdu(&self) -> &T {
+        &self.pdu
+    }
+
     /// Validate the frame against the given request, returning the data if valid.
     pub fn into_data<Request>(self, request: &Frame<Request>) -> Result<T::Data, ValidationError>
     where
         T: Response<Request>,
     {
-        if self.calculate_crc() != self.crc.get() {
-            return Err(ValidationError::Crc(CrcError));
-        }
+        self.validate_crc()?;
 
         if self.unit_id != request.unit_id {
             debug!(
