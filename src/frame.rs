@@ -283,7 +283,7 @@ impl PduView {
 mod tests {
     use hex_literal::hex;
 
-    use super::*;
+    use super::FrameView;
 
     #[test]
     fn test_length_validation() {

@@ -1,7 +1,9 @@
 //! Client functions for [`embedded_io_async`]-based IO.
 
 use core::error::Error as CoreError;
+use std::fmt::Debug;
 
+use defmt_or_log::*;
 use embedded_io_async::{Read, ReadExactError, Write};
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -15,18 +17,20 @@ use crate::pdu::{CrcError, ValidationError};
 
 async fn write_frame<T, E>(mut dst: impl Write<Error = E>, frame: &T) -> Result<(), E>
 where
-    T: IntoBytes + Immutable,
+    T: IntoBytes + Immutable + Debug,
 {
+    trace!("Writing frame: {:?}", frame);
     dst.write_all(frame.as_bytes()).await?;
     dst.flush().await
 }
 
 async fn read_frame<T, E>(mut src: impl Read<Error = E>) -> Result<T, ReadExactError<E>>
 where
-    T: FromBytes + IntoBytes,
+    T: FromBytes + IntoBytes + Debug,
 {
     let mut message = T::new_zeroed();
     src.read_exact(message.as_mut_bytes()).await?;
+    trace!("Read frame: {:?}", message);
     Ok(message)
 }
 
