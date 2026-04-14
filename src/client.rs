@@ -1,7 +1,6 @@
 //! Client functions for [`embedded_io_async`]-based IO.
 
-use core::error::Error as CoreError;
-use std::fmt::Debug;
+use core::{error::Error as CoreError, fmt::Debug};
 
 use defmt_or_log::*;
 use embedded_io_async::{Read, ReadExactError, Write};
